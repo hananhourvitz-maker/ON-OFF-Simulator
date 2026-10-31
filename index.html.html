@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>סימולטור בקרת ON/OFF עם היסטרזיס</title>
+<style>
+:root{font-family:Arial,Helvetica,sans-serif;color:#172033;background:#f4f6fa}
+*{box-sizing:border-box}
+body{margin:0;padding:24px}
+main{max-width:900px;margin:auto}
+h1{text-align:center;font-size:clamp(1.45rem,3vw,2rem);margin:4px 0 20px}
+.panel{background:white;border:1px solid #dce2eb;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 3px 12px #18243a0a}
+.panel h2{font-size:1.1rem;margin:0 0 14px}
+.distance{text-align:center;font-size:2.5rem;font-weight:700;margin:4px}
+input[type=range]{width:100%;accent-color:#315f9e;cursor:pointer}
+.range-labels{display:flex;justify-content:space-between;color:#68758a;font-size:.85rem}
+.buttons{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+button{border:1px solid #cbd5e1;background:#f8fafc;padding:9px 15px;border-radius:9px;cursor:pointer;font-size:.95rem}
+button:hover{background:#eaf0f8}
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.state{border:2px solid transparent;border-radius:12px;text-align:center;padding:14px 6px}
+.state b{display:block;font-size:2rem}
+.state span{display:block;margin-top:4px;font-weight:bold}
+.state small{display:block;margin-top:5px}
+.a{background:#e0f2e7;color:#176b37}.b{background:#fff2d5;color:#855800}.c{background:#e2edfb;color:#174f91}
+.state.active{border-color:#253449;box-shadow:0 0 0 2px #fff inset}
+.output{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pwm{font-size:2rem;font-weight:700}
+.high{color:#16803c}.low{color:#a66b00}
+.meter{height:14px;border-radius:99px;background:#e8edf3;overflow:hidden;margin-top:12px}
+.meter div{height:100%;border-radius:99px;transition:width .15s}
+.note{color:#5c687b;line-height:1.5;margin:12px 0 0}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px;text-align:center;border-bottom:1px solid #e6eaf0}
+th{color:#596579;font-weight:600}
+.table-wrap{max-height:245px;overflow:auto}
+canvas{width:100%;height:180px;border:1px solid #e2e7ef;border-radius:10px;background:#fff}
+.footer{font-size:.83rem;color:#667085;text-align:center;margin:18px}
+@media(max-width:560px){body{padding:12px}.panel{padding:13px}.states{gap:5px}.state{padding:10px 3px}.state small{font-size:.72rem}.output{display:block}.pwm{margin-top:8px}}
+</style>
+</head>
+<body>
+<main>
+<h1>סימולטור בקרת ON/OFF עם היסטרזיס</h1>
+
+<section class="panel">
+<h2>1. שינוי המרחק הנמדד</h2>
+<div class="distance"><span id="distanceValue">45</span> ס״מ</div>
+<input id="distance" type="range" min="0" max="100" value="45" step="1" aria-label="מרחק בסנטימטרים">
+<div class="range-labels"><span>0 ס״מ</span><span>100 ס״מ</span></div>
+<div class="buttons">
+<button data-distance="25">25 ס״מ</button>
+<button data-distance="35">35 ס״מ</button>
+<button data-distance="45">45 ס״מ</button>
+<button id="reset">איפוס לנקודת התחלה</button>
+</div>
+</section>
+
+<section class="panel">
+<h2>2. המצב הלוגי של המערכת</h2>
+<div class="states">
+<div class="state a" id="stateA"><b>A</b><span>מתחת</span><small>מרחק קטן מ־30 ס״מ</small></div>
+<div class="state b" id="stateB"><b>B</b><span>בתוך</span><small>בין 30 ל־40 ס״מ</small></div>
+<div class="state c" id="stateC"><b>C</b><span>מעל</span><small>מרחק גדול מ־40 ס״מ</small></div>
+</div>
+<p class="note" id="stateExplanation" aria-live="polite"></p>
+</section>
+
+<section class="panel">
+<h2>3. פקודת הבקר למנוע</h2>
+<div class="output">
+<div><div class="pwm high" id="pwm">PWM = 200</div><div id="speed">מהירות גבוהה</div></div>
+<div><strong>סף תחתון: 30 ס״מ</strong><br><strong>סף עליון: 40 ס״מ</strong></div>
+</div>
+<div class="meter"><div id="meterFill" style="width:100%;background:#16a34a"></div></div>
+<p class="note">בתחום ההיסטרזיס (30–40 ס״מ), פקודת הבקר נשמרת בהתאם למצב הקודם.</p>
+</section>
+
+<section class="panel">
+<h2>4. היסטוריית המדידות</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>מספר מדידה</th><th>מרחק (ס״מ)</th><th>מצב לוגי</th><th>פקודת PWM</th></tr></thead>
+<tbody id="history"><tr><td>1</td><td>45</td><td>C</td><td>200</td></tr></tbody>
+</table>
+</div>
+<div class="buttons"><button id="clearHistory">ניקוי היסטוריה</button></div>
+</section>
+
+<section class="panel">
+<h2>5. המחשת פקודת הבקר לאורך המדידות</h2>
+<canvas id="chart" width="820" height="180" aria-label="גרף פקודת הבקר לאורך המדידות"></canvas>
+<p class="note">הגרף מציג את פקודת הבקר בכל שינוי מרחק שנעשה בסימולטור.</p>
+</section>
+<p class="footer">הסימולטור מדגים את לוגיקת ההיסטרזיס בלבד, ולא מודל פיזיקלי של תנועת רכב או מנוע.</p>
+</main>
+<script>
+(() => {
+ const low=30, high=40;
+ let distance=45, motorHigh=true, history=[{d:45,s:"C",p:200}];
+ const $=id=>document.getElementById(id);
+ function stateFor(d){return d<=low?"A":d>=high?"C":"B";}
+ function update(d,record=true){
+   distance=Math.max(0,Math.min(100,Math.round(Number(d))));
+   if(distance<=low) motorHigh=false;
+   else if(distance>=high) motorHigh=true;
+   const state=stateFor(distance), pwm=motorHigh?200:50;
+   $("distance").value=distance; $("distanceValue").textContent=distance;
+   ["A","B","C"].forEach(x=>$("state"+x).classList.toggle("active",x===state));
+   $("pwm").textContent="PWM = "+pwm;
+   $("pwm").className="pwm "+(motorHigh?"high":"low");
+   $("speed").textContent=motorHigh?"מהירות גבוהה":"מהירות נמוכה";
+   $("meterFill").style.width=(motorHigh?100:25)+"%";
+   $("meterFill").style.background=motorHigh?"#16a34a":"#d69e2e";
+   $("stateExplanation").textContent=state==="B"
+    ?"המערכת נמצאת בתחום ההיסטרזיס. פקודת הבקר נשמרת בהתאם למצב הקודם."
+    :state==="A"?"המרחק הגיע לסף התחתון או ירד מתחתיו: הבקר מורה על מהירות נמוכה."
+    :"המרחק הגיע לסף העליון או עלה מעליו: הבקר מורה על מהירות גבוהה.";
+   if(record){
+     history.push({d:distance,s:state,p:pwm});
+     if(history.length>100) history.shift();
+     renderHistory();
+   }
+ }
+ function renderHistory(){
+   $("history").innerHTML=history.slice().reverse().map((h,i)=>
+    `<tr><td>${history.length-i}</td><td>${h.d}</td><td>${h.s}</td><td>${h.p}</td></tr>`).join("");
+   drawChart();
+ }
+ function drawChart(){
+   const c=$("chart"),ctx=c.getContext("2d"),w=c.width,h=c.height;
+   ctx.clearRect(0,0,w,h);
+   ctx.strokeStyle="#e5eaf1";ctx.lineWidth=1;
+   [50,100,150,200].forEach(v=>{
+     const y=h-20-(v/220)*(h-40);
+     ctx.beginPath();ctx.moveTo(42,y);ctx.lineTo(w-12,y);ctx.stroke();
+     ctx.fillStyle="#667085";ctx.font="12px Arial";ctx.fillText(String(v),8,y+4);
+   });
+   if(history.length===1){
+     const y=h-20-(history[0].p/220)*(h-40);
+     ctx.fillStyle="#16803c";ctx.beginPath();ctx.arc(42,y,4,0,Math.PI*2);ctx.fill();
+     return;
+   }
+   const x=i=>42+i*(w-58)/(history.length-1);
+   const y=v=>h-20-(v/220)*(h-40);
+   ctx.strokeStyle="#315f9e";ctx.lineWidth=3;ctx.beginPath();
+   history.forEach((v,i)=>{if(i===0)ctx.moveTo(x(i),y(v.p));else ctx.lineTo(x(i),y(v.p));});
+   ctx.stroke();
+   history.forEach((v,i)=>{ctx.fillStyle="#315f9e";ctx.beginPath();ctx.arc(x(i),y(v.p),3,0,Math.PI*2);ctx.fill();});
+   ctx.fillStyle="#667085";ctx.font="12px Arial";ctx.fillText("מדידות ←",w-75,h-5);
+ }
+ $("distance").addEventListener("input",e=>update(e.target.value));
+ document.querySelectorAll("[data-distance]").forEach(b=>b.addEventListener("click",()=>update(b.dataset.distance)));
+ $("reset").addEventListener("click",()=>{motorHigh=true;history=[{d:45,s:"C",p:200}];update(45,false);renderHistory();});
+ $("clearHistory").addEventListener("click",()=>{history=[];renderHistory();});
+ renderHistory(); update(45,false);
+})();
+</script>
+</body>
+</html>
